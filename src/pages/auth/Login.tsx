@@ -28,9 +28,14 @@ const Login = () => {
     
     try {
       await login(email, password);
+      toast.success("Login successful!");
       navigate(from, { replace: true });
     } catch (error) {
-      // Error is already handled in the login function
+      if (error instanceof Error) {
+        toast.error(error.message);
+      } else {
+        toast.error("Login failed. Please try again.");
+      }
     }
   };
 
@@ -86,6 +91,9 @@ const Login = () => {
               )}
             </Button>
           </form>
+          <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+            <p className="text-sm text-center text-muted-foreground">Demo Account: parent@example.com / password</p>
+          </div>
         </CardContent>
         <CardFooter className="flex justify-center">
           <p className="text-sm text-muted-foreground">

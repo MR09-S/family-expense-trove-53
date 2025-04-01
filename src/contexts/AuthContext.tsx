@@ -30,16 +30,34 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const USERS_STORAGE_KEY = 'family-expense-tracker-users';
 const CURRENT_USER_KEY = 'family-expense-tracker-current-user';
 
+// Demo user data
+const demoUsers: User[] = [
+  {
+    id: '1',
+    name: 'Demo Parent',
+    email: 'parent@example.com',
+    role: 'parent',
+    children: ['2']
+  },
+  {
+    id: '2',
+    name: 'Demo Child',
+    email: 'child@example.com',
+    role: 'child',
+    parentId: '1'
+  }
+];
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Initialize or load users from localStorage
   useEffect(() => {
-    // Load saved users or create initial database
+    // Load saved users or create initial database with demo users
     const savedUsers = localStorage.getItem(USERS_STORAGE_KEY);
     if (!savedUsers) {
-      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify([]));
+      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(demoUsers));
     }
 
     // Check if user is already logged in
@@ -67,21 +85,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     try {
       const users = getUsers();
-      const user = users.find(u => u.email === email);
+      const user = users.find(u => u.email === email.toLowerCase());
       
       if (!user) {
-        throw new Error('User not found');
+        throw new Error('User not found. Please check your email or register.');
       }
       
       // In a real app, you would hash and compare passwords
-      // For demo, we skip password validation
+      // For demo, we skip password validation or use a simple check
+      if (password !== 'password') {
+        throw new Error('Incorrect password. Try using "password" for demo.');
+      }
       
       setCurrentUser(user);
       localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
-      toast.success('Logged in successfully');
+      
+      return Promise.resolve();
     } catch (error) {
-      toast.error('Login failed');
-      throw error;
+      if (error instanceof Error) {
+        console.error("Login error:", error.message);
+      }
+      return Promise.reject(error);
     } finally {
       setIsLoading(false);
     }
@@ -94,7 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const users = getUsers();
       
       // Check if user already exists
-      if (users.some(user => user.email === email)) {
+      if (users.some(user => user.email === email.toLowerCase())) {
         throw new Error('User already exists');
       }
       
@@ -102,7 +126,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newUser: User = {
         id: Date.now().toString(),
         name,
-        email,
+        email: email.toLowerCase(),
         role,
         ...(role === 'child' && parentId ? { parentId } : {}),
         ...(role === 'parent' ? { children: [] } : {})
@@ -126,10 +150,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCurrentUser(newUser);
       localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(newUser));
       
-      toast.success('Registration successful');
+      return Promise.resolve();
     } catch (error) {
-      toast.error('Registration failed');
-      throw error;
+      return Promise.reject(error);
     } finally {
       setIsLoading(false);
     }
