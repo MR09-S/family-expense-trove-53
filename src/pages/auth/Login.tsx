@@ -92,7 +92,7 @@ const Login = () => {
             </Button>
           </form>
           <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-            <p className="text-sm text-center text-muted-foreground">Demo Account: parent@example.com / password</p>
+            <p className="text-sm text-center text-muted-foreground">Demo credentials will be created on your first registration</p>
           </div>
         </CardContent>
         <CardFooter className="flex justify-center">

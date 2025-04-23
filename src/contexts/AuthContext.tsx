@@ -1,6 +1,26 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged, 
+  UserCredential,
+  updateProfile as firebaseUpdateProfile
+} from 'firebase/auth';
+import { 
+  doc, 
+  setDoc, 
+  getDoc, 
+  updateDoc,
+  collection,
+  query,
+  where,
+  getDocs
+} from 'firebase/firestore';
+import { auth, db, storage } from '@/lib/firebase';
 import { toast } from 'sonner';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export type UserRole = 'parent' | 'child';
 
@@ -21,91 +41,79 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string, role: UserRole, parentId?: string) => Promise<void>;
   logout: () => void;
-  updateProfile: (user: Partial<User>) => void;
+  updateProfile: (user: Partial<User>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Mock users database for demo purposes
-const USERS_STORAGE_KEY = 'family-expense-tracker-users';
-const CURRENT_USER_KEY = 'family-expense-tracker-current-user';
-
-// Demo user data
-const demoUsers: User[] = [
-  {
-    id: '1',
-    name: 'Demo Parent',
-    email: 'parent@example.com',
-    role: 'parent',
-    children: ['2']
-  },
-  {
-    id: '2',
-    name: 'Demo Child',
-    email: 'child@example.com',
-    role: 'child',
-    parentId: '1'
-  }
-];
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Initialize or load users from localStorage
+  // Listen for auth state changes
   useEffect(() => {
-    // Load saved users or create initial database with demo users
-    const savedUsers = localStorage.getItem(USERS_STORAGE_KEY);
-    if (!savedUsers) {
-      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(demoUsers));
-    }
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          // Get additional user data from Firestore
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          
+          if (userDoc.exists()) {
+            const userData = userDoc.data() as Omit<User, 'id'>;
+            
+            // Set current user with combined data
+            setCurrentUser({
+              id: user.uid,
+              name: user.displayName || userData.name,
+              email: user.email || userData.email,
+              role: userData.role,
+              avatar: user.photoURL || userData.avatar,
+              parentId: userData.parentId,
+              children: userData.children
+            });
+          } else {
+            // This would be unusual, as we should have created a user document during registration
+            console.error("User document doesn't exist in Firestore");
+            await signOut(auth);
+            setCurrentUser(null);
+          }
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+          toast.error("Error loading user data");
+        }
+      } else {
+        setCurrentUser(null);
+      }
+      
+      setIsLoading(false);
+    });
 
-    // Check if user is already logged in
-    const savedUser = localStorage.getItem(CURRENT_USER_KEY);
-    if (savedUser) {
-      setCurrentUser(JSON.parse(savedUser));
-    }
-    
-    setIsLoading(false);
+    // Cleanup subscription
+    return () => unsubscribe();
   }, []);
 
-  const getUsers = (): User[] => {
-    const users = localStorage.getItem(USERS_STORAGE_KEY);
-    return users ? JSON.parse(users) : [];
-  };
-
-  const saveUsers = (users: User[]) => {
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-  };
-
   const login = async (email: string, password: string) => {
-    // In a real app, you would validate credentials against a backend
-    // For demo, we just check if the email exists in our mock database
     setIsLoading(true);
     
     try {
-      const users = getUsers();
-      const user = users.find(u => u.email === email.toLowerCase());
-      
-      if (!user) {
-        throw new Error('User not found. Please check your email or register.');
-      }
-      
-      // In a real app, you would hash and compare passwords
-      // For demo, we skip password validation or use a simple check
-      if (password !== 'password') {
-        throw new Error('Incorrect password. Try using "password" for demo.');
-      }
-      
-      setCurrentUser(user);
-      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
-      
+      await signInWithEmailAndPassword(auth, email.toLowerCase(), password);
+      // User state will be updated by the auth state observer
       return Promise.resolve();
-    } catch (error) {
-      if (error instanceof Error) {
-        console.error("Login error:", error.message);
+    } catch (error: any) {
+      let errorMessage = "Login failed. Please try again.";
+      
+      if (error.code === 'auth/invalid-email') {
+        errorMessage = "Invalid email address.";
+      } else if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
+        errorMessage = "Invalid email or password.";
+      } else if (error.code === 'auth/wrong-password') {
+        errorMessage = "Incorrect password.";
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = "Too many failed login attempts. Please try again later.";
       }
-      return Promise.reject(error);
+      
+      console.error("Login error:", error);
+      return Promise.reject(new Error(errorMessage));
     } finally {
       setIsLoading(false);
     }
@@ -115,16 +123,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     
     try {
-      const users = getUsers();
+      // Create Firebase auth user
+      const userCredential: UserCredential = await createUserWithEmailAndPassword(
+        auth, 
+        email.toLowerCase(),
+        password
+      );
       
-      // Check if user already exists
-      if (users.some(user => user.email === email.toLowerCase())) {
-        throw new Error('User already exists');
-      }
+      const { user } = userCredential;
       
-      // Create new user
-      const newUser: User = {
-        id: Date.now().toString(),
+      // Set display name
+      await firebaseUpdateProfile(user, { displayName: name });
+      
+      // Create user document in Firestore
+      const userData: Omit<User, 'id'> = {
         name,
         email: email.toLowerCase(),
         role,
@@ -132,53 +144,92 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...(role === 'parent' ? { children: [] } : {})
       };
       
+      await setDoc(doc(db, 'users', user.uid), userData);
+      
       // If this is a child account, update the parent's children array
       if (role === 'child' && parentId) {
-        const parentIndex = users.findIndex(user => user.id === parentId);
-        if (parentIndex >= 0) {
-          users[parentIndex].children = [
-            ...(users[parentIndex].children || []),
-            newUser.id
-          ];
+        const parentRef = doc(db, 'users', parentId);
+        const parentDoc = await getDoc(parentRef);
+        
+        if (parentDoc.exists()) {
+          const parentData = parentDoc.data();
+          const children = [...(parentData.children || []), user.uid];
+          await updateDoc(parentRef, { children });
         }
       }
       
-      // Add user to database
-      saveUsers([...users, newUser]);
-      
-      // Log in the new user
-      setCurrentUser(newUser);
-      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(newUser));
-      
       return Promise.resolve();
-    } catch (error) {
-      return Promise.reject(error);
+      // Auth state observer will handle updating the current user
+    } catch (error: any) {
+      let errorMessage = "Registration failed. Please try again.";
+      
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = "Email is already in use. Please use a different email.";
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = "Invalid email address.";
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = "Password is too weak. Please use a stronger password.";
+      }
+      
+      console.error("Registration error:", error);
+      return Promise.reject(new Error(errorMessage));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem(CURRENT_USER_KEY);
-    toast.info('Logged out');
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      // Auth state observer will handle setting currentUser to null
+      toast.info('Logged out');
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast.error('Error logging out');
+    }
   };
 
-  const updateProfile = (updatedInfo: Partial<User>) => {
-    if (!currentUser) return;
-
-    const updatedUser = { ...currentUser, ...updatedInfo };
-    setCurrentUser(updatedUser);
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updatedUser));
-
-    // Also update in the users database
-    const users = getUsers();
-    const updatedUsers = users.map(user => 
-      user.id === currentUser.id ? { ...user, ...updatedInfo } : user
-    );
-    saveUsers(updatedUsers);
-
-    toast.success('Profile updated');
+  const updateProfile = async (userData: Partial<User>) => {
+    if (!currentUser || !auth.currentUser) return;
+    
+    try {
+      const userRef = doc(db, 'users', currentUser.id);
+      
+      // Handle avatar upload if there's a file
+      if (userData.avatar && userData.avatar.startsWith('data:')) {
+        // Convert base64 to file
+        const response = await fetch(userData.avatar);
+        const blob = await response.blob();
+        const avatarRef = ref(storage, `avatars/${currentUser.id}`);
+        await uploadBytes(avatarRef, blob);
+        
+        // Get download URL
+        const downloadURL = await getDownloadURL(avatarRef);
+        
+        // Update Firebase auth profile
+        await firebaseUpdateProfile(auth.currentUser, { photoURL: downloadURL });
+        
+        // Update avatar URL in userData
+        userData.avatar = downloadURL;
+      }
+      
+      // Update user doc in Firestore
+      await updateDoc(userRef, userData);
+      
+      // Update Firebase display name if name is being updated
+      if (userData.name) {
+        await firebaseUpdateProfile(auth.currentUser, { displayName: userData.name });
+      }
+      
+      // Update local state
+      setCurrentUser(prevUser => prevUser ? { ...prevUser, ...userData } : null);
+      
+      toast.success('Profile updated');
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      toast.error('Failed to update profile');
+      throw error;
+    }
   };
 
   const authValue = {

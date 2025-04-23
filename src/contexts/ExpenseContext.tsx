@@ -2,8 +2,25 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from './AuthContext';
+import { db } from '@/lib/firebase';
+import { 
+  collection,
+  query,
+  where,
+  orderBy,
+  getDocs,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  serverTimestamp,
+  Timestamp,
+  getDoc,
+  setDoc
+} from 'firebase/firestore';
 
 export interface Budget {
+  id: string;
   userId: string;
   amount: number;
   period: 'weekly' | 'monthly';
@@ -17,26 +34,25 @@ export interface Expense {
   category: string;
   description: string;
   date: string; // ISO date string
-  createdAt: string; // ISO date string
-  updatedAt: string; // ISO date string
+  createdAt: string | Timestamp; // ISO date string or Firestore timestamp
+  updatedAt: string | Timestamp; // ISO date string or Firestore timestamp
 }
 
 interface ExpenseContextType {
   expenses: Expense[];
   budgets: Budget[];
-  addExpense: (expense: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>) => void;
-  updateExpense: (id: string, expense: Partial<Omit<Expense, 'id' | 'userId'>>) => void;
-  deleteExpense: (id: string) => void;
-  setBudget: (userId: string, amount: number, period: 'weekly' | 'monthly', categoryLimits?: Record<string, number>) => void;
+  addExpense: (expense: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateExpense: (id: string, expense: Partial<Omit<Expense, 'id' | 'userId'>>) => Promise<void>;
+  deleteExpense: (id: string) => Promise<void>;
+  setBudget: (userId: string, amount: number, period: 'weekly' | 'monthly', categoryLimits?: Record<string, number>) => Promise<void>;
   getUserExpenses: (userId: string) => Expense[];
   getUserBudget: (userId: string) => Budget | undefined;
   getCategories: () => string[];
   exportToCsv: (userId: string) => void;
   exportToPdf: (userId: string) => void;
+  fetchExpenses: () => Promise<void>;
+  fetchBudgets: () => Promise<void>;
 }
-
-const EXPENSES_STORAGE_KEY = 'family-expense-tracker-expenses';
-const BUDGETS_STORAGE_KEY = 'family-expense-tracker-budgets';
 
 // Predefined expense categories
 export const EXPENSE_CATEGORIES = [
@@ -57,101 +73,213 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
 
-  // Load expenses and budgets from localStorage
+  // Fetch initial data when user changes
   useEffect(() => {
-    const savedExpenses = localStorage.getItem(EXPENSES_STORAGE_KEY);
-    if (savedExpenses) {
-      setExpenses(JSON.parse(savedExpenses));
+    if (currentUser) {
+      fetchExpenses();
+      fetchBudgets();
     } else {
-      localStorage.setItem(EXPENSES_STORAGE_KEY, JSON.stringify([]));
+      // Clear data when logged out
+      setExpenses([]);
+      setBudgets([]);
     }
+  }, [currentUser]);
 
-    const savedBudgets = localStorage.getItem(BUDGETS_STORAGE_KEY);
-    if (savedBudgets) {
-      setBudgets(JSON.parse(savedBudgets));
-    } else {
-      localStorage.setItem(BUDGETS_STORAGE_KEY, JSON.stringify([]));
+  // Fetch expenses from Firestore
+  const fetchExpenses = async () => {
+    if (!currentUser) return;
+    
+    try {
+      let expensesQuery;
+      
+      if (currentUser.role === 'parent' && currentUser.children && currentUser.children.length > 0) {
+        // For parents, get their expenses and their children's expenses
+        expensesQuery = query(
+          collection(db, 'expenses'),
+          where('userId', 'in', [currentUser.id, ...currentUser.children]),
+          orderBy('date', 'desc')
+        );
+      } else {
+        // For children or parents without children, just get their expenses
+        expensesQuery = query(
+          collection(db, 'expenses'),
+          where('userId', '==', currentUser.id),
+          orderBy('date', 'desc')
+        );
+      }
+      
+      const querySnapshot = await getDocs(expensesQuery);
+      const fetchedExpenses: Expense[] = [];
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        
+        fetchedExpenses.push({
+          id: doc.id,
+          userId: data.userId,
+          amount: data.amount,
+          category: data.category,
+          description: data.description,
+          date: data.date,
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt
+        });
+      });
+      
+      setExpenses(fetchedExpenses);
+    } catch (error) {
+      console.error("Error fetching expenses:", error);
+      toast.error("Error loading expenses");
     }
-  }, []);
-
-  // Save expenses to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem(EXPENSES_STORAGE_KEY, JSON.stringify(expenses));
-  }, [expenses]);
-
-  // Save budgets to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem(BUDGETS_STORAGE_KEY, JSON.stringify(budgets));
-  }, [budgets]);
-
-  const addExpense = (expense: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>) => {
-    if (!currentUser) return;
-
-    const now = new Date().toISOString();
-    const newExpense: Expense = {
-      ...expense,
-      id: Date.now().toString(),
-      createdAt: now,
-      updatedAt: now
-    };
-
-    setExpenses(prev => [...prev, newExpense]);
-    toast.success('Expense added');
   };
 
-  const updateExpense = (id: string, updatedFields: Partial<Omit<Expense, 'id' | 'userId'>>) => {
+  // Fetch budgets from Firestore
+  const fetchBudgets = async () => {
     if (!currentUser) return;
-
-    setExpenses(prev => 
-      prev.map(expense => 
-        expense.id === id ? 
-        { 
-          ...expense, 
-          ...updatedFields, 
-          updatedAt: new Date().toISOString() 
-        } : 
-        expense
-      )
-    );
-    toast.success('Expense updated');
+    
+    try {
+      let budgetsQuery;
+      
+      if (currentUser.role === 'parent' && currentUser.children && currentUser.children.length > 0) {
+        // For parents, get their budget and their children's budgets
+        budgetsQuery = query(
+          collection(db, 'budgets'),
+          where('userId', 'in', [currentUser.id, ...currentUser.children])
+        );
+      } else {
+        // For children or parents without children, just get their budget
+        budgetsQuery = query(
+          collection(db, 'budgets'),
+          where('userId', '==', currentUser.id)
+        );
+      }
+      
+      const querySnapshot = await getDocs(budgetsQuery);
+      const fetchedBudgets: Budget[] = [];
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        
+        fetchedBudgets.push({
+          id: doc.id,
+          userId: data.userId,
+          amount: data.amount,
+          period: data.period,
+          categoryLimits: data.categoryLimits
+        });
+      });
+      
+      setBudgets(fetchedBudgets);
+    } catch (error) {
+      console.error("Error fetching budgets:", error);
+      toast.error("Error loading budgets");
+    }
   };
 
-  const deleteExpense = (id: string) => {
+  const addExpense = async (expense: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (!currentUser) return;
 
-    setExpenses(prev => prev.filter(expense => expense.id !== id));
-    toast.success('Expense deleted');
+    try {
+      // Add expense to Firestore
+      await addDoc(collection(db, 'expenses'), {
+        ...expense,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      // Refresh expenses
+      fetchExpenses();
+      
+      toast.success('Expense added');
+    } catch (error) {
+      console.error("Error adding expense:", error);
+      toast.error("Failed to add expense");
+    }
   };
 
-  const setBudget = (userId: string, amount: number, period: 'weekly' | 'monthly', categoryLimits?: Record<string, number>) => {
+  const updateExpense = async (id: string, updatedFields: Partial<Omit<Expense, 'id' | 'userId'>>) => {
+    if (!currentUser) return;
+
+    try {
+      const expenseRef = doc(db, 'expenses', id);
+      
+      // Update in Firestore
+      await updateDoc(expenseRef, {
+        ...updatedFields,
+        updatedAt: serverTimestamp()
+      });
+      
+      // Refresh expenses
+      fetchExpenses();
+      
+      toast.success('Expense updated');
+    } catch (error) {
+      console.error("Error updating expense:", error);
+      toast.error("Failed to update expense");
+    }
+  };
+
+  const deleteExpense = async (id: string) => {
+    if (!currentUser) return;
+
+    try {
+      // Delete from Firestore
+      await deleteDoc(doc(db, 'expenses', id));
+      
+      // Update local state
+      setExpenses(prev => prev.filter(expense => expense.id !== id));
+      
+      toast.success('Expense deleted');
+    } catch (error) {
+      console.error("Error deleting expense:", error);
+      toast.error("Failed to delete expense");
+    }
+  };
+
+  const setBudget = async (userId: string, amount: number, period: 'weekly' | 'monthly', categoryLimits?: Record<string, number>) => {
     if (!currentUser || (currentUser.role !== 'parent' && currentUser.id !== userId)) {
       toast.error('Not authorized to set budget');
       return;
     }
 
-    const budgetIndex = budgets.findIndex(b => b.userId === userId);
-    
-    if (budgetIndex >= 0) {
-      // Update existing budget
-      const updatedBudgets = [...budgets];
-      updatedBudgets[budgetIndex] = {
-        ...updatedBudgets[budgetIndex],
-        amount,
-        period,
-        ...(categoryLimits && { categoryLimits })
-      };
-      setBudgets(updatedBudgets);
-    } else {
-      // Create new budget
-      setBudgets([...budgets, { 
-        userId, 
-        amount, 
-        period,
-        ...(categoryLimits && { categoryLimits })
-      }]);
+    try {
+      // Check if budget already exists
+      const budgetQuery = query(
+        collection(db, 'budgets'),
+        where('userId', '==', userId)
+      );
+      
+      const querySnapshot = await getDocs(budgetQuery);
+      
+      if (!querySnapshot.empty) {
+        // Update existing budget
+        const budgetDoc = querySnapshot.docs[0];
+        await updateDoc(doc(db, 'budgets', budgetDoc.id), {
+          amount,
+          period,
+          ...(categoryLimits && { categoryLimits }),
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        // Create new budget
+        await addDoc(collection(db, 'budgets'), {
+          userId,
+          amount,
+          period,
+          ...(categoryLimits && { categoryLimits }),
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
+      
+      // Refresh budgets
+      fetchBudgets();
+      
+      toast.success('Budget updated');
+    } catch (error) {
+      console.error("Error setting budget:", error);
+      toast.error("Failed to update budget");
     }
-    
-    toast.success('Budget updated');
   };
 
   const getUserExpenses = (userId: string) => {
@@ -177,7 +305,7 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
     
     const headers = ['Date', 'Category', 'Description', 'Amount'];
     const rows = userExpenses.map(exp => [
-      new Date(exp.date).toLocaleDateString(),
+      typeof exp.date === 'string' ? new Date(exp.date).toLocaleDateString() : 'N/A',
       exp.category,
       exp.description,
       exp.amount.toFixed(2)
@@ -222,7 +350,9 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
     getUserBudget,
     getCategories,
     exportToCsv,
-    exportToPdf
+    exportToPdf,
+    fetchExpenses,
+    fetchBudgets
   };
 
   return (

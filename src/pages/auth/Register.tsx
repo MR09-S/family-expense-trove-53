@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { db } from "@/lib/firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -19,6 +21,8 @@ const Register = () => {
   const [role, setRole] = useState<"parent" | "child">("parent");
   const [parentId, setParentId] = useState("");
   const [step, setStep] = useState(1);
+  const [parentIdLoading, setParentIdLoading] = useState(false);
+  const [parentIdError, setParentIdError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,10 +33,53 @@ const Register = () => {
     }
     
     try {
+      if (role === "child" && parentId) {
+        // Verify parent ID exists and is a parent
+        const isValidParent = await verifyParentId(parentId);
+        
+        if (!isValidParent) {
+          toast.error("Invalid parent ID. Please check with your parent.");
+          return;
+        }
+      }
+      
       await register(name, email, password, role, role === "child" ? parentId : undefined);
+      toast.success("Account created successfully!");
       navigate("/dashboard", { replace: true });
     } catch (error) {
-      // Error is already handled in the register function
+      if (error instanceof Error) {
+        toast.error(error.message);
+      } else {
+        toast.error("Registration failed. Please try again.");
+      }
+    }
+  };
+
+  const verifyParentId = async (id: string) => {
+    setParentIdLoading(true);
+    setParentIdError("");
+    
+    try {
+      const parentRef = query(
+        collection(db, "users"),
+        where("role", "==", "parent")
+      );
+      
+      const querySnapshot = await getDocs(parentRef);
+      const parentExists = querySnapshot.docs.some(doc => doc.id === id);
+      
+      if (!parentExists) {
+        setParentIdError("Parent ID not found or is not a parent account");
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error("Error verifying parent ID:", error);
+      setParentIdError("Error verifying parent ID");
+      return false;
+    } finally {
+      setParentIdLoading(false);
     }
   };
 
@@ -44,6 +91,11 @@ const Register = () => {
     
     if (password !== confirmPassword) {
       toast.error("Passwords don't match");
+      return;
+    }
+    
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters");
       return;
     }
     
@@ -94,6 +146,9 @@ const Register = () => {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Password must be at least 6 characters long
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword">Confirm Password</Label>
@@ -137,8 +192,14 @@ const Register = () => {
                       id="parentId"
                       placeholder="Ask your parent for their ID"
                       value={parentId}
-                      onChange={(e) => setParentId(e.target.value)}
+                      onChange={(e) => {
+                        setParentId(e.target.value);
+                        setParentIdError("");
+                      }}
                     />
+                    {parentIdError && (
+                      <p className="text-xs text-red-500">{parentIdError}</p>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       This connects your account to your parent's account
                     </p>
@@ -157,9 +218,9 @@ const Register = () => {
                   <Button 
                     type="submit" 
                     className="flex-1" 
-                    disabled={isLoading || (role === "child" && !parentId)}
+                    disabled={isLoading || (role === "child" && !parentId) || parentIdLoading}
                   >
-                    {isLoading ? (
+                    {isLoading || parentIdLoading ? (
                       <span className="flex items-center gap-2">
                         <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
