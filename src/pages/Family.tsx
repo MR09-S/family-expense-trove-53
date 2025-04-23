@@ -1,21 +1,13 @@
+
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useExpense } from "@/contexts/ExpenseContext";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { IndianRupee, Edit, User, ArrowRight, UserPlus } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { UserPlus } from "lucide-react";
 import { toast } from "sonner";
+import { ChildCard } from "@/components/family/ChildCard";
+import { EditChildDialog } from "@/components/family/EditChildDialog";
+import { AddChildDialog } from "@/components/family/AddChildDialog";
 
 interface ChildData {
   id: string;
@@ -97,8 +89,6 @@ const Family = () => {
       setNewChildName("");
       setNewChildEmail("");
       setNewChildPassword("");
-      fetchExpenses();
-      fetchBudgets();
     } catch (error: any) {
       toast.error(error.message || "Failed to create child account");
     }
@@ -122,191 +112,43 @@ const Family = () => {
               Monitor and manage your family's expenses
             </p>
           </div>
-          {currentUser?.role === 'parent' && (
-            <Button onClick={() => setShowAddChildDialog(true)}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Add Child
-            </Button>
-          )}
+          <Button onClick={() => setShowAddChildDialog(true)}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Add Child
+          </Button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {childrenData.map((child) => (
-            <Card key={child.id}>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <User className="h-4 w-4 text-primary" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-lg">{child.name}</CardTitle>
-                      <CardDescription>{child.email}</CardDescription>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="icon" onClick={() => handleEditChild(child)}>
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardHeader>
-              
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Monthly Budget</span>
-                    <span className="font-medium">{formatCurrency(child.budget)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Total Spent</span>
-                    <span className="font-medium">{formatCurrency(child.totalSpent)}</span>
-                  </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full ${
-                        child.totalSpent <= child.budget ? 'bg-primary' : 'bg-destructive'
-                      }`}
-                      style={{ 
-                        width: `${Math.min((child.totalSpent / (child.budget || 1)) * 100, 100)}%` 
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium">Recent Expenses</h4>
-                  {child.recentExpenses.length > 0 ? (
-                    <div className="space-y-2">
-                      {child.recentExpenses.map((expense, index) => (
-                        <div key={index} className="flex justify-between text-sm">
-                          <span className="text-muted-foreground truncate max-w-[180px]">
-                            {expense.description}
-                          </span>
-                          <span className="font-medium">{formatCurrency(expense.amount)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No recent expenses</p>
-                  )}
-                </div>
-              </CardContent>
-
-              <CardFooter>
-                <Button variant="ghost" className="w-full" asChild>
-                  <a href={`/expenses?child=${child.id}`}>
-                    View All Expenses
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </a>
-                </Button>
-              </CardFooter>
-            </Card>
+            <ChildCard 
+              key={child.id}
+              child={child}
+              onEdit={handleEditChild}
+            />
           ))}
         </div>
 
-        <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Edit Child Information</DialogTitle>
-              <DialogDescription>
-                Update your child's details and budget settings.
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="budget">Monthly Budget</Label>
-                <div className="relative">
-                  <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="budget"
-                    type="number"
-                    value={editBudget}
-                    onChange={(e) => setEditBudget(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-            </div>
+        <EditChildDialog
+          open={showEditDialog}
+          onOpenChange={setShowEditDialog}
+          editName={editName}
+          editBudget={editBudget}
+          onNameChange={setEditName}
+          onBudgetChange={setEditBudget}
+          onUpdate={handleUpdateChild}
+        />
 
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setShowEditDialog(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleUpdateChild}>
-                Save Changes
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={showAddChildDialog} onOpenChange={setShowAddChildDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add New Child Account</DialogTitle>
-              <DialogDescription>
-                Create a new child account linked to your family.
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="childName">Name</Label>
-                <Input
-                  id="childName"
-                  value={newChildName}
-                  onChange={(e) => setNewChildName(e.target.value)}
-                  placeholder="Child's name"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="childEmail">Email</Label>
-                <Input
-                  id="childEmail"
-                  type="email"
-                  value={newChildEmail}
-                  onChange={(e) => setNewChildEmail(e.target.value)}
-                  placeholder="Child's email"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="childPassword">Password</Label>
-                <Input
-                  id="childPassword"
-                  type="password"
-                  value={newChildPassword}
-                  onChange={(e) => setNewChildPassword(e.target.value)}
-                  placeholder="Create a password"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Password must be at least 6 characters long
-                </p>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setShowAddChildDialog(false)}>
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleCreateChild}
-                disabled={!newChildName || !newChildEmail || newChildPassword.length < 6}
-              >
-                Create Account
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <AddChildDialog
+          open={showAddChildDialog}
+          onOpenChange={setShowAddChildDialog}
+          name={newChildName}
+          email={newChildEmail}
+          password={newChildPassword}
+          onNameChange={setNewChildName}
+          onEmailChange={setNewChildEmail}
+          onPasswordChange={setNewChildPassword}
+          onSubmit={handleCreateChild}
+        />
       </div>
     </div>
   );
