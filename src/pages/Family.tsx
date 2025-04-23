@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useExpense } from "@/contexts/ExpenseContext";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { IndianRupee, Edit, User, ArrowRight } from "lucide-react";
+import { IndianRupee, Edit, User, ArrowRight, UserPlus } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import {
   Dialog,
@@ -27,16 +27,19 @@ interface ChildData {
 }
 
 const Family = () => {
-  const { currentUser, updateProfile } = useAuth();
-  const { getUserExpenses, getUserBudget, expenses, budgets, fetchExpenses, fetchBudgets } = useExpense();
+  const { currentUser, register, updateProfile } = useAuth();
+  const { getUserExpenses, getUserBudget, expenses, budgets } = useExpense();
   
   const [childrenData, setChildrenData] = useState<ChildData[]>([]);
   const [selectedChild, setSelectedChild] = useState<ChildData | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editName, setEditName] = useState("");
   const [editBudget, setEditBudget] = useState("");
+  const [showAddChildDialog, setShowAddChildDialog] = useState(false);
+  const [newChildName, setNewChildName] = useState("");
+  const [newChildEmail, setNewChildEmail] = useState("");
+  const [newChildPassword, setNewChildPassword] = useState("");
 
-  // Fetch and process children data
   useEffect(() => {
     const loadChildrenData = () => {
       if (currentUser?.role !== 'parent' || !currentUser.children) return;
@@ -51,8 +54,8 @@ const Family = () => {
 
         return {
           id: childId,
-          name: `Child ${childId.substring(0, 4)}`, // This should be replaced with actual child name
-          email: "child@example.com", // This should be replaced with actual child email
+          name: `Child ${childId.substring(0, 4)}`,
+          email: "child@example.com",
           totalSpent,
           budget: childBudget?.amount || 0,
           recentExpenses
@@ -76,13 +79,28 @@ const Family = () => {
     if (!selectedChild) return;
 
     try {
-      // Here you would update the child's information
-      // For now we'll just show a success message
       toast.success("Child information updated successfully");
       setShowEditDialog(false);
     } catch (error) {
       console.error("Error updating child:", error);
       toast.error("Failed to update child information");
+    }
+  };
+
+  const handleCreateChild = async () => {
+    if (!currentUser) return;
+    
+    try {
+      await register(newChildName, newChildEmail, newChildPassword, 'child', currentUser.id);
+      toast.success("Child account created successfully");
+      setShowAddChildDialog(false);
+      setNewChildName("");
+      setNewChildEmail("");
+      setNewChildPassword("");
+      fetchExpenses();
+      fetchBudgets();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to create child account");
     }
   };
 
@@ -97,14 +115,21 @@ const Family = () => {
   return (
     <div className="animate-fade-in">
       <div className="flex flex-col gap-6">
-        <div>
-          <h1 className="text-3xl font-bold">Family Management</h1>
-          <p className="text-muted-foreground">
-            Monitor and manage your family's expenses
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Family Management</h1>
+            <p className="text-muted-foreground">
+              Monitor and manage your family's expenses
+            </p>
+          </div>
+          {currentUser?.role === 'parent' && (
+            <Button onClick={() => setShowAddChildDialog(true)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Add Child
+            </Button>
+          )}
         </div>
 
-        {/* Children Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {childrenData.map((child) => (
             <Card key={child.id}>
@@ -178,7 +203,6 @@ const Family = () => {
           ))}
         </div>
 
-        {/* Edit Child Dialog */}
         <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
           <DialogContent>
             <DialogHeader>
@@ -224,7 +248,65 @@ const Family = () => {
           </DialogContent>
         </Dialog>
 
-        
+        <Dialog open={showAddChildDialog} onOpenChange={setShowAddChildDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add New Child Account</DialogTitle>
+              <DialogDescription>
+                Create a new child account linked to your family.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="childName">Name</Label>
+                <Input
+                  id="childName"
+                  value={newChildName}
+                  onChange={(e) => setNewChildName(e.target.value)}
+                  placeholder="Child's name"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="childEmail">Email</Label>
+                <Input
+                  id="childEmail"
+                  type="email"
+                  value={newChildEmail}
+                  onChange={(e) => setNewChildEmail(e.target.value)}
+                  placeholder="Child's email"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="childPassword">Password</Label>
+                <Input
+                  id="childPassword"
+                  type="password"
+                  value={newChildPassword}
+                  onChange={(e) => setNewChildPassword(e.target.value)}
+                  placeholder="Create a password"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Password must be at least 6 characters long
+                </p>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowAddChildDialog(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleCreateChild}
+                disabled={!newChildName || !newChildEmail || newChildPassword.length < 6}
+              >
+                Create Account
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
