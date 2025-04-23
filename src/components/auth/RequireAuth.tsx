@@ -2,15 +2,30 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect } from "react";
+import { useExpense } from "@/contexts/ExpenseContext";
 
 const RequireAuth = () => {
   const { isAuthenticated, isLoading, currentUser } = useAuth();
+  const { fetchExpenses, fetchBudgets } = useExpense();
   const location = useLocation();
 
   // Log authentication state for debugging
   useEffect(() => {
     console.log("Auth state:", { isAuthenticated, isLoading, userId: currentUser?.id });
   }, [isAuthenticated, isLoading, currentUser]);
+
+  // Fetch data when authentication completes successfully
+  useEffect(() => {
+    if (isAuthenticated && currentUser) {
+      console.log("RequireAuth: User authenticated, fetching data");
+      try {
+        fetchExpenses();
+        fetchBudgets();
+      } catch (error) {
+        console.error("Error fetching initial data:", error);
+      }
+    }
+  }, [isAuthenticated, currentUser, fetchExpenses, fetchBudgets]);
 
   if (isLoading) {
     return (

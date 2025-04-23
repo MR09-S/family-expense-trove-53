@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useExpense, Expense } from "@/contexts/ExpenseContext";
@@ -11,6 +10,7 @@ import {
   CardTitle 
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   BarChart,
   Bar,
@@ -32,7 +32,8 @@ import {
   DollarSign, 
   Calendar, 
   ArrowRight, 
-  PlusCircle 
+  PlusCircle,
+  AlertCircle 
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -46,6 +47,8 @@ const Dashboard = () => {
   const [totalSpent, setTotalSpent] = useState(0);
   const [budget, setBudget] = useState(0);
   const [categoryData, setCategoryData] = useState<{ name: string; value: number }[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   // For children monitored by this parent
   const [childrenExpenses, setChildrenExpenses] = useState<{
@@ -58,20 +61,32 @@ const Dashboard = () => {
 
   // Force refresh data when component loads
   useEffect(() => {
-    if (currentUser) {
-      console.log("Dashboard: Fetching expenses and budgets");
-      
-      // Force refresh expenses and budgets
-      fetchExpenses().then(() => {
-        fetchBudgets().then(() => {
+    const loadData = async () => {
+      if (currentUser) {
+        setIsLoading(true);
+        setError(null);
+        console.log("Dashboard: Fetching expenses and budgets");
+        
+        try {
+          // Force refresh expenses and budgets
+          await fetchExpenses();
+          await fetchBudgets();
           console.log("Dashboard: Data refreshed");
-        });
-      });
-    }
+        } catch (error) {
+          console.error("Dashboard: Error refreshing data", error);
+          setError("Failed to load data. Please try again.");
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+    
+    loadData();
   }, [currentUser, fetchExpenses, fetchBudgets]);
 
+  // Process data when expenses or budgets change
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && expenses.length >= 0 && budgets.length >= 0) {
       // Get user expenses
       const userExpenseList = getUserExpenses(currentUser.id);
       setUserExpenses(userExpenseList);
@@ -172,6 +187,28 @@ const Dashboard = () => {
 
   // Colors for the pie chart
   const COLORS = ['#4361EE', '#3DDBD9', '#2EC4B6', '#FF9F1C', '#E71D36', '#7B61FF', '#FCBF49'];
+
+  // If there's an error, show it
+  if (error) {
+    return (
+      <div className="animate-fade-in">
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4 mr-2" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+        <Button onClick={() => window.location.reload()}>Reload Page</Button>
+      </div>
+    );
+  }
+  
+  // If loading, show a spinner
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in">

@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from './AuthContext';
@@ -97,16 +96,26 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Fetch initial data when user changes
   useEffect(() => {
-    if (currentUser && isAuthenticated) {
-      console.log("ExpenseProvider: User authenticated, fetching data");
-      fetchExpenses();
-      fetchBudgets();
-      setDataFetchAttempted(true);
-    } else if (!currentUser && dataFetchAttempted) {
-      console.log("ExpenseProvider: User logged out, clearing data");
-      setExpenses([]);
-      setBudgets([]);
-    }
+    const loadData = async () => {
+      if (currentUser && isAuthenticated) {
+        console.log("ExpenseProvider: User authenticated, fetching data");
+        try {
+          await fetchExpenses();
+          await fetchBudgets();
+          setDataFetchAttempted(true);
+        } catch (error) {
+          console.error("Error fetching initial data:", error);
+          // Even if there's an error, we mark fetch as attempted to avoid endless retries
+          setDataFetchAttempted(true);
+        }
+      } else if (!currentUser && dataFetchAttempted) {
+        console.log("ExpenseProvider: User logged out, clearing data");
+        setExpenses([]);
+        setBudgets([]);
+      }
+    };
+    
+    loadData();
   }, [currentUser, isAuthenticated]);
 
   // Fetch expenses from Firestore
@@ -143,18 +152,23 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const fetchedExpenses: Expense[] = [];
       
       querySnapshot.forEach((doc) => {
-        const data = doc.data() as ExpenseDoc;
-        
-        fetchedExpenses.push({
-          id: doc.id,
-          userId: data.userId,
-          amount: data.amount,
-          category: data.category,
-          description: data.description,
-          date: data.date,
-          createdAt: data.createdAt,
-          updatedAt: data.updatedAt
-        });
+        try {
+          const data = doc.data() as ExpenseDoc;
+          
+          fetchedExpenses.push({
+            id: doc.id,
+            userId: data.userId,
+            amount: data.amount,
+            category: data.category,
+            description: data.description,
+            date: data.date,
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt
+          });
+        } catch (error) {
+          console.error(`Error processing expense doc ${doc.id}:`, error);
+          // Skip this document but continue with others
+        }
       });
       
       console.log(`fetchExpenses: Fetched ${fetchedExpenses.length} expenses`);
@@ -162,6 +176,9 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch (error) {
       console.error("Error fetching expenses:", error);
       toast.error("Error loading expenses");
+      // Return empty array in case of error
+      setExpenses([]);
+      throw error;
     }
   };
 
@@ -197,15 +214,20 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const fetchedBudgets: Budget[] = [];
       
       querySnapshot.forEach((doc) => {
-        const data = doc.data() as BudgetDoc;
-        
-        fetchedBudgets.push({
-          id: doc.id,
-          userId: data.userId,
-          amount: data.amount,
-          period: data.period,
-          categoryLimits: data.categoryLimits
-        });
+        try {
+          const data = doc.data() as BudgetDoc;
+          
+          fetchedBudgets.push({
+            id: doc.id,
+            userId: data.userId,
+            amount: data.amount,
+            period: data.period,
+            categoryLimits: data.categoryLimits
+          });
+        } catch (error) {
+          console.error(`Error processing budget doc ${doc.id}:`, error);
+          // Skip this document but continue with others
+        }
       });
       
       console.log(`fetchBudgets: Fetched ${fetchedBudgets.length} budgets`);
@@ -213,6 +235,9 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch (error) {
       console.error("Error fetching budgets:", error);
       toast.error("Error loading budgets");
+      // Return empty array in case of error
+      setBudgets([]);
+      throw error;
     }
   };
 

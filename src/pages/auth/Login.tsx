@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -14,17 +15,18 @@ const Login = () => {
   const { login, isLoading, isAuthenticated } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loginAttempted, setLoginAttempted] = useState(false);
 
   // Get the redirect path from location state or default to dashboard
   const from = location.state?.from?.pathname || "/dashboard";
 
   // Check if user is already authenticated and redirect if necessary
   useEffect(() => {
-    if (isAuthenticated) {
-      console.log("User is authenticated, redirecting to:", from);
+    if (isAuthenticated && loginAttempted) {
+      console.log("Login: User authenticated, redirecting to:", from);
       navigate(from, { replace: true });
     }
-  }, [isAuthenticated, navigate, from]);
+  }, [isAuthenticated, loginAttempted, navigate, from]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,15 +37,17 @@ const Login = () => {
     }
     
     try {
+      setLoginAttempted(true);
       await login(email, password);
       toast.success("Login successful!");
-      // Navigation is now handled by the useEffect above
+      // Navigation is handled by the useEffect above
     } catch (error) {
       if (error instanceof Error) {
         toast.error(error.message);
       } else {
         toast.error("Login failed. Please try again.");
       }
+      setLoginAttempted(false); // Reset for another attempt
     }
   };
 

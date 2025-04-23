@@ -8,7 +8,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyB8zxXGK3BiH4jHswT5yOYU01pzK7n840U",
   authDomain: "famxp-9f59a.firebaseapp.com",
   projectId: "famxp-9f59a",
-  storageBucket: "famxp-9f59a.firebasestorage.app",
+  storageBucket: "famxp-9f59a.appspot.com", // Fixed storage bucket URL
   messagingSenderId: "65159984804",
   appId: "1:65159984804:web:8780c106c88f169916d831"
 };
