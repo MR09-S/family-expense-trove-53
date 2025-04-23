@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -16,39 +17,56 @@ const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginAttempted, setLoginAttempted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Get the redirect path from location state or default to dashboard
   const from = location.state?.from?.pathname || "/dashboard";
 
   // Check if user is already authenticated and redirect if necessary
   useEffect(() => {
+    if (isAuthenticated) {
+      console.log("Login: User already authenticated, redirecting to:", from);
+      navigate(from, { replace: true });
+    }
+  }, [isAuthenticated, navigate, from]);
+
+  // Handle authentication state changes for login attempts
+  useEffect(() => {
     if (isAuthenticated && loginAttempted) {
-      console.log("Login: User authenticated, redirecting to:", from);
+      console.log("Login: Login successful, redirecting to:", from);
+      toast.success("Login successful!");
       navigate(from, { replace: true });
     }
   }, [isAuthenticated, loginAttempted, navigate, from]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     
     if (!email || !password) {
-      toast.error("Please fill in all fields");
+      setError("Please fill in all fields");
       return;
     }
     
     try {
       setLoginAttempted(true);
       await login(email, password);
-      toast.success("Login successful!");
       // Navigation is handled by the useEffect above
     } catch (error) {
       if (error instanceof Error) {
-        toast.error(error.message);
+        setError(error.message);
       } else {
-        toast.error("Login failed. Please try again.");
+        setError("Login failed. Please try again.");
       }
       setLoginAttempted(false); // Reset for another attempt
     }
+  };
+
+  // Demo credentials 
+  const fillDemoCredentials = () => {
+    setEmail("demo@example.com");
+    setPassword("password123");
+    toast.info("Demo credentials filled. Click 'Sign In' to continue.");
   };
 
   return (
@@ -61,6 +79,13 @@ const Login = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {error && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4 mr-2" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -103,8 +128,11 @@ const Login = () => {
               )}
             </Button>
           </form>
-          <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-            <p className="text-sm text-center text-muted-foreground">Demo credentials will be created on your first registration</p>
+          
+          <div className="mt-4 p-3 bg-muted/50 rounded-lg cursor-pointer" onClick={fillDemoCredentials}>
+            <p className="text-sm text-center text-muted-foreground hover:text-primary transition-colors">
+              Click here to use demo credentials
+            </p>
           </div>
         </CardContent>
         <CardFooter className="flex justify-center">

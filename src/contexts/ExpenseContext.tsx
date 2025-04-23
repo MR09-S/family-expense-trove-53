@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from './AuthContext';
 import { db } from '@/lib/firebase';
@@ -16,7 +16,8 @@ import {
   Timestamp,
   getDoc,
   setDoc,
-  DocumentData
+  DocumentData,
+  limit
 } from 'firebase/firestore';
 
 export interface Budget {
@@ -93,8 +94,175 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [dataFetchAttempted, setDataFetchAttempted] = useState(false);
+  const [lastFetchTime, setLastFetchTime] = useState<number | null>(null);
 
-  // Fetch initial data when user changes
+  // Fetch expenses from Firestore with retry logic
+  const fetchExpenses = useCallback(async () => {
+    if (!currentUser) {
+      console.log("fetchExpenses: No user, skipping fetch");
+      return;
+    }
+    
+    // Implement a simple throttling to avoid too many consecutive calls
+    const now = Date.now();
+    if (lastFetchTime && now - lastFetchTime < 2000) {
+      console.log("fetchExpenses: Throttling fetch request");
+      return;
+    }
+    setLastFetchTime(now);
+
+    const maxRetries = 3;
+    let retries = 0;
+    
+    while (retries < maxRetries) {
+      try {
+        console.log("fetchExpenses: Starting fetch for user", currentUser.id);
+        let expensesQuery;
+        
+        if (currentUser.role === 'parent' && currentUser.children && currentUser.children.length > 0) {
+          // For parents, get their expenses and their children's expenses
+          const userIds = [currentUser.id, ...currentUser.children].slice(0, 10); // Firestore IN has a limit
+          console.log("Fetching expenses for parent and children:", userIds);
+          
+          // Use a simpler query to avoid index issues
+          expensesQuery = query(
+            collection(db, 'expenses'),
+            where('userId', 'in', userIds),
+            limit(100)
+          );
+        } else {
+          // For children or parents without children, just get their expenses
+          console.log("Fetching expenses for single user:", currentUser.id);
+          expensesQuery = query(
+            collection(db, 'expenses'),
+            where('userId', '==', currentUser.id),
+            limit(100)
+          );
+        }
+        
+        const querySnapshot = await getDocs(expensesQuery);
+        const fetchedExpenses: Expense[] = [];
+        
+        querySnapshot.forEach((doc) => {
+          try {
+            const data = doc.data() as ExpenseDoc;
+            
+            fetchedExpenses.push({
+              id: doc.id,
+              userId: data.userId,
+              amount: data.amount,
+              category: data.category,
+              description: data.description,
+              date: data.date,
+              createdAt: data.createdAt,
+              updatedAt: data.updatedAt
+            });
+          } catch (error) {
+            console.error(`Error processing expense doc ${doc.id}:`, error);
+            // Skip this document but continue with others
+          }
+        });
+        
+        console.log(`fetchExpenses: Fetched ${fetchedExpenses.length} expenses`);
+        
+        // Sort expenses by date (newest first) since we're not using orderBy in the query
+        const sortedExpenses = fetchedExpenses.sort((a, b) => {
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
+        });
+        
+        setExpenses(sortedExpenses);
+        break; // Successful, exit retry loop
+      } catch (error) {
+        retries++;
+        console.error(`Error fetching expenses (attempt ${retries}):`, error);
+        
+        if (retries >= maxRetries) {
+          console.error("Max retries reached for fetching expenses");
+          toast.error("Error loading expenses");
+          // Return empty array in case of error
+          setExpenses([]);
+          throw error;
+        }
+        
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+  }, [currentUser, lastFetchTime]);
+
+  // Fetch budgets from Firestore with retry logic
+  const fetchBudgets = useCallback(async () => {
+    if (!currentUser) {
+      console.log("fetchBudgets: No user, skipping fetch");
+      return;
+    }
+    
+    const maxRetries = 3;
+    let retries = 0;
+    
+    while (retries < maxRetries) {
+      try {
+        console.log("fetchBudgets: Starting fetch for user", currentUser.id);
+        let budgetsQuery;
+        
+        if (currentUser.role === 'parent' && currentUser.children && currentUser.children.length > 0) {
+          // For parents, get their budget and their children's budgets
+          const userIds = [currentUser.id, ...currentUser.children].slice(0, 10); // Firestore IN has a limit
+          console.log("Fetching budgets for parent and children:", userIds);
+          budgetsQuery = query(
+            collection(db, 'budgets'),
+            where('userId', 'in', userIds)
+          );
+        } else {
+          // For children or parents without children, just get their budget
+          console.log("Fetching budgets for single user:", currentUser.id);
+          budgetsQuery = query(
+            collection(db, 'budgets'),
+            where('userId', '==', currentUser.id)
+          );
+        }
+        
+        const querySnapshot = await getDocs(budgetsQuery);
+        const fetchedBudgets: Budget[] = [];
+        
+        querySnapshot.forEach((doc) => {
+          try {
+            const data = doc.data() as BudgetDoc;
+            
+            fetchedBudgets.push({
+              id: doc.id,
+              userId: data.userId,
+              amount: data.amount,
+              period: data.period,
+              categoryLimits: data.categoryLimits
+            });
+          } catch (error) {
+            console.error(`Error processing budget doc ${doc.id}:`, error);
+            // Skip this document but continue with others
+          }
+        });
+        
+        console.log(`fetchBudgets: Fetched ${fetchedBudgets.length} budgets`);
+        setBudgets(fetchedBudgets);
+        break; // Successful, exit retry loop
+      } catch (error) {
+        retries++;
+        console.error(`Error fetching budgets (attempt ${retries}):`, error);
+        
+        if (retries >= maxRetries) {
+          console.error("Max retries reached for fetching budgets");
+          toast.error("Error loading budgets");
+          // Return empty array in case of error
+          setBudgets([]);
+          throw error;
+        }
+        
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+  }, [currentUser]);
+
   useEffect(() => {
     const loadData = async () => {
       if (currentUser && isAuthenticated) {
@@ -116,130 +284,7 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
     
     loadData();
-  }, [currentUser, isAuthenticated]);
-
-  // Fetch expenses from Firestore
-  const fetchExpenses = async () => {
-    if (!currentUser) {
-      console.log("fetchExpenses: No user, skipping fetch");
-      return;
-    }
-    
-    try {
-      console.log("fetchExpenses: Starting fetch for user", currentUser.id);
-      let expensesQuery;
-      
-      if (currentUser.role === 'parent' && currentUser.children && currentUser.children.length > 0) {
-        // For parents, get their expenses and their children's expenses
-        const userIds = [currentUser.id, ...currentUser.children];
-        console.log("Fetching expenses for parent and children:", userIds);
-        expensesQuery = query(
-          collection(db, 'expenses'),
-          where('userId', 'in', userIds),
-          orderBy('date', 'desc')
-        );
-      } else {
-        // For children or parents without children, just get their expenses
-        console.log("Fetching expenses for single user:", currentUser.id);
-        expensesQuery = query(
-          collection(db, 'expenses'),
-          where('userId', '==', currentUser.id),
-          orderBy('date', 'desc')
-        );
-      }
-      
-      const querySnapshot = await getDocs(expensesQuery);
-      const fetchedExpenses: Expense[] = [];
-      
-      querySnapshot.forEach((doc) => {
-        try {
-          const data = doc.data() as ExpenseDoc;
-          
-          fetchedExpenses.push({
-            id: doc.id,
-            userId: data.userId,
-            amount: data.amount,
-            category: data.category,
-            description: data.description,
-            date: data.date,
-            createdAt: data.createdAt,
-            updatedAt: data.updatedAt
-          });
-        } catch (error) {
-          console.error(`Error processing expense doc ${doc.id}:`, error);
-          // Skip this document but continue with others
-        }
-      });
-      
-      console.log(`fetchExpenses: Fetched ${fetchedExpenses.length} expenses`);
-      setExpenses(fetchedExpenses);
-    } catch (error) {
-      console.error("Error fetching expenses:", error);
-      toast.error("Error loading expenses");
-      // Return empty array in case of error
-      setExpenses([]);
-      throw error;
-    }
-  };
-
-  // Fetch budgets from Firestore
-  const fetchBudgets = async () => {
-    if (!currentUser) {
-      console.log("fetchBudgets: No user, skipping fetch");
-      return;
-    }
-    
-    try {
-      console.log("fetchBudgets: Starting fetch for user", currentUser.id);
-      let budgetsQuery;
-      
-      if (currentUser.role === 'parent' && currentUser.children && currentUser.children.length > 0) {
-        // For parents, get their budget and their children's budgets
-        const userIds = [currentUser.id, ...currentUser.children];
-        console.log("Fetching budgets for parent and children:", userIds);
-        budgetsQuery = query(
-          collection(db, 'budgets'),
-          where('userId', 'in', userIds)
-        );
-      } else {
-        // For children or parents without children, just get their budget
-        console.log("Fetching budgets for single user:", currentUser.id);
-        budgetsQuery = query(
-          collection(db, 'budgets'),
-          where('userId', '==', currentUser.id)
-        );
-      }
-      
-      const querySnapshot = await getDocs(budgetsQuery);
-      const fetchedBudgets: Budget[] = [];
-      
-      querySnapshot.forEach((doc) => {
-        try {
-          const data = doc.data() as BudgetDoc;
-          
-          fetchedBudgets.push({
-            id: doc.id,
-            userId: data.userId,
-            amount: data.amount,
-            period: data.period,
-            categoryLimits: data.categoryLimits
-          });
-        } catch (error) {
-          console.error(`Error processing budget doc ${doc.id}:`, error);
-          // Skip this document but continue with others
-        }
-      });
-      
-      console.log(`fetchBudgets: Fetched ${fetchedBudgets.length} budgets`);
-      setBudgets(fetchedBudgets);
-    } catch (error) {
-      console.error("Error fetching budgets:", error);
-      toast.error("Error loading budgets");
-      // Return empty array in case of error
-      setBudgets([]);
-      throw error;
-    }
-  };
+  }, [currentUser, isAuthenticated, fetchExpenses, fetchBudgets, dataFetchAttempted]);
 
   const addExpense = async (expense: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (!currentUser) return;
@@ -337,6 +382,7 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const querySnapshot = await getDocs(budgetQuery);
       
       const budgetData = {
+        userId,
         amount,
         period,
         ...(categoryLimits && { categoryLimits }),
@@ -347,29 +393,23 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
         // Update existing budget
         const budgetDoc = querySnapshot.docs[0];
         await updateDoc(doc(db, 'budgets', budgetDoc.id), budgetData);
+        
+        // Update local state
+        setBudgets(prev => prev.map(b => 
+          b.userId === userId 
+            ? { ...b, amount, period, ...(categoryLimits && { categoryLimits }) } 
+            : b
+        ));
       } else {
         // Create new budget
-        await addDoc(collection(db, 'budgets'), {
-          userId,
+        const docRef = await addDoc(collection(db, 'budgets'), {
           ...budgetData,
           createdAt: serverTimestamp(),
         });
-      }
-      
-      // Update local state
-      const existingBudgetIndex = budgets.findIndex(b => b.userId === userId);
-      if (existingBudgetIndex >= 0) {
-        const updatedBudgets = [...budgets];
-        updatedBudgets[existingBudgetIndex] = {
-          ...updatedBudgets[existingBudgetIndex],
-          amount,
-          period,
-          ...(categoryLimits && { categoryLimits })
-        };
-        setBudgets(updatedBudgets);
-      } else {
-        setBudgets([...budgets, {
-          id: Date.now().toString(), // Temporary ID until we refresh
+        
+        // Update local state
+        setBudgets(prev => [...prev, {
+          id: docRef.id,
           userId,
           amount,
           period,
@@ -399,7 +439,6 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return EXPENSE_CATEGORIES;
   };
 
-  // Export functions
   const exportToCsv = (userId: string) => {
     const userExpenses = getUserExpenses(userId);
     
@@ -416,13 +455,11 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
       exp.amount.toFixed(2)
     ]);
     
-    // Create CSV content
     const csvContent = [
       headers.join(','),
       ...rows.map(row => row.join(','))
     ].join('\n');
     
-    // Create and download the file
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
@@ -439,8 +476,6 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const exportToPdf = (userId: string) => {
-    // In a real app, we'd use a library like jsPDF
-    // For this demo, we'll just show a toast message
     toast.info('PDF export would be implemented with a library like jsPDF');
   };
 
