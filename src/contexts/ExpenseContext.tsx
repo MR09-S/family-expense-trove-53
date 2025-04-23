@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from './AuthContext';
@@ -200,15 +201,30 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!currentUser) return;
 
     try {
+      console.log("Adding expense:", expense);
+      
       // Add expense to Firestore
-      await addDoc(collection(db, 'expenses'), {
+      const expenseData = {
         ...expense,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
-      });
+      };
       
-      // Refresh expenses
-      fetchExpenses();
+      const docRef = await addDoc(collection(db, 'expenses'), expenseData);
+      console.log("Expense added with ID:", docRef.id);
+      
+      // Add to local state to avoid re-fetching
+      const newExpense: Expense = {
+        id: docRef.id,
+        ...expense,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      setExpenses(prev => [newExpense, ...prev]);
+      
+      // Refresh expenses to ensure we have the latest data
+      await fetchExpenses();
       
       toast.success('Expense added');
     } catch (error) {
@@ -229,8 +245,13 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updatedAt: serverTimestamp()
       });
       
-      // Refresh expenses
-      fetchExpenses();
+      // Update local state
+      setExpenses(prev => prev.map(expense => 
+        expense.id === id ? { ...expense, ...updatedFields, updatedAt: new Date().toISOString() } : expense
+      ));
+      
+      // Also refresh to ensure data consistency
+      await fetchExpenses();
       
       toast.success('Expense updated');
     } catch (error) {
@@ -271,29 +292,49 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
       
       const querySnapshot = await getDocs(budgetQuery);
       
+      const budgetData = {
+        amount,
+        period,
+        ...(categoryLimits && { categoryLimits }),
+        updatedAt: serverTimestamp()
+      };
+      
       if (!querySnapshot.empty) {
         // Update existing budget
         const budgetDoc = querySnapshot.docs[0];
-        await updateDoc(doc(db, 'budgets', budgetDoc.id), {
-          amount,
-          period,
-          ...(categoryLimits && { categoryLimits }),
-          updatedAt: serverTimestamp()
-        });
+        await updateDoc(doc(db, 'budgets', budgetDoc.id), budgetData);
       } else {
         // Create new budget
         await addDoc(collection(db, 'budgets'), {
           userId,
-          amount,
-          period,
-          ...(categoryLimits && { categoryLimits }),
+          ...budgetData,
           createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
         });
       }
       
-      // Refresh budgets
-      fetchBudgets();
+      // Update local state
+      const existingBudgetIndex = budgets.findIndex(b => b.userId === userId);
+      if (existingBudgetIndex >= 0) {
+        const updatedBudgets = [...budgets];
+        updatedBudgets[existingBudgetIndex] = {
+          ...updatedBudgets[existingBudgetIndex],
+          amount,
+          period,
+          ...(categoryLimits && { categoryLimits })
+        };
+        setBudgets(updatedBudgets);
+      } else {
+        setBudgets([...budgets, {
+          id: Date.now().toString(), // Temporary ID until we refresh
+          userId,
+          amount,
+          period,
+          ...(categoryLimits && { categoryLimits })
+        }]);
+      }
+      
+      // Refresh budgets to ensure data consistency
+      await fetchBudgets();
       
       toast.success('Budget updated');
     } catch (error) {

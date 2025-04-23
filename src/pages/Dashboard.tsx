@@ -38,7 +38,7 @@ import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
   const { currentUser } = useAuth();
-  const { getUserExpenses, getUserBudget, expenses } = useExpense();
+  const { getUserExpenses, getUserBudget, expenses, budgets, fetchExpenses, fetchBudgets } = useExpense();
   const navigate = useNavigate();
   
   const [userExpenses, setUserExpenses] = useState<Expense[]>([]);
@@ -56,10 +56,26 @@ const Dashboard = () => {
     percentage: number;
   }[]>([]);
 
+  // Force refresh data when component loads
   useEffect(() => {
     if (currentUser) {
+      console.log("Dashboard: Fetching expenses and budgets");
+      
+      // Force refresh expenses and budgets
+      fetchExpenses().then(() => {
+        fetchBudgets().then(() => {
+          console.log("Dashboard: Data refreshed");
+        });
+      });
+    }
+  }, [currentUser, fetchExpenses, fetchBudgets]);
+
+  useEffect(() => {
+    if (currentUser) {
+      // Get user expenses
       const userExpenseList = getUserExpenses(currentUser.id);
       setUserExpenses(userExpenseList);
+      console.log("Dashboard: User expenses loaded:", userExpenseList.length);
       
       // Get recent expenses
       const sorted = [...userExpenseList].sort(
@@ -96,11 +112,8 @@ const Dashboard = () => {
       // Get data for children if user is a parent
       if (currentUser.role === 'parent' && currentUser.children?.length) {
         const childrenData = currentUser.children.map((childId) => {
-          // In a real app, we would fetch child data from the database
-          // For the demo, we're using mock data
-          
-          // Find the child user
-          const childUser = { id: childId, name: `Child ${childId.substring(0, 4)}` };
+          // Find the child user - in a real app we might fetch more data
+          const childName = `Child ${childId.substring(0, 4)}`;
           
           // Get child's expenses
           const childExpenses = getUserExpenses(childId);
@@ -115,7 +128,7 @@ const Dashboard = () => {
           
           return {
             childId,
-            childName: childUser.name,
+            childName,
             total: childTotal,
             budget: budgetAmount,
             percentage
@@ -125,7 +138,7 @@ const Dashboard = () => {
         setChildrenExpenses(childrenData);
       }
     }
-  }, [currentUser, getUserExpenses, getUserBudget, expenses]);
+  }, [currentUser, getUserExpenses, getUserBudget, expenses, budgets]);
 
   // Generate weekly spending data for the chart
   const getWeeklyData = () => {

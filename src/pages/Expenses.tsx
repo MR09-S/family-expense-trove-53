@@ -49,7 +49,8 @@ const Expenses = () => {
     getUserExpenses,
     exportToCsv,
     exportToPdf,
-    getCategories 
+    getCategories,
+    fetchExpenses
   } = useExpense();
 
   const [userExpenses, setUserExpenses] = useState<Expense[]>([]);
@@ -71,10 +72,21 @@ const Expenses = () => {
   // Categories 
   const categories = getCategories();
 
+  // Force refresh expenses when component loads
+  useEffect(() => {
+    if (currentUser) {
+      // Force refresh expenses
+      fetchExpenses().then(() => {
+        console.log("Expenses fetched");
+      });
+    }
+  }, [currentUser, fetchExpenses]);
+
   // Load user's expenses
   useEffect(() => {
     if (currentUser) {
       const fetchedExpenses = getUserExpenses(currentUser.id);
+      console.log("User expenses:", fetchedExpenses.length);
       setUserExpenses(fetchedExpenses);
       setFilteredExpenses(fetchedExpenses);
     }
@@ -146,8 +158,13 @@ const Expenses = () => {
   };
 
   // Handle new expense submission
-  const handleAddExpense = (e: React.FormEvent) => {
+  const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!currentUser) {
+      toast.error("You must be logged in to add expenses");
+      return;
+    }
     
     if (!amount || !category || !description || !date) {
       toast.error("Please fill all fields");
@@ -160,16 +177,26 @@ const Expenses = () => {
       return;
     }
     
-    addExpense({
-      userId: currentUser!.id,
-      amount: amountNum,
-      category,
-      description,
-      date
-    });
-    
-    setShowAddDialog(false);
-    resetForm();
+    try {
+      console.log("Adding expense with date:", date);
+      
+      await addExpense({
+        userId: currentUser.id,
+        amount: amountNum,
+        category,
+        description,
+        date
+      });
+      
+      setShowAddDialog(false);
+      resetForm();
+      
+      // Force refresh expenses
+      await fetchExpenses();
+    } catch (error) {
+      console.error("Error adding expense:", error);
+      toast.error("Failed to add expense");
+    }
   };
 
   // Open edit dialog for an expense
@@ -183,7 +210,7 @@ const Expenses = () => {
   };
 
   // Handle expense update
-  const handleUpdateExpense = (e: React.FormEvent) => {
+  const handleUpdateExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!currentExpense || !amount || !category || !description || !date) {
@@ -197,22 +224,38 @@ const Expenses = () => {
       return;
     }
     
-    updateExpense(currentExpense.id, {
-      amount: amountNum,
-      category,
-      description,
-      date
-    });
-    
-    setShowEditDialog(false);
-    resetForm();
-    setCurrentExpense(null);
+    try {
+      await updateExpense(currentExpense.id, {
+        amount: amountNum,
+        category,
+        description,
+        date
+      });
+      
+      setShowEditDialog(false);
+      resetForm();
+      setCurrentExpense(null);
+      
+      // Force refresh expenses
+      await fetchExpenses();
+    } catch (error) {
+      console.error("Error updating expense:", error);
+      toast.error("Failed to update expense");
+    }
   };
 
   // Handle expense deletion
-  const handleDeleteExpense = (id: string) => {
+  const handleDeleteExpense = async (id: string) => {
     if (window.confirm("Are you sure you want to delete this expense?")) {
-      deleteExpense(id);
+      try {
+        await deleteExpense(id);
+        
+        // Force refresh expenses
+        await fetchExpenses();
+      } catch (error) {
+        console.error("Error deleting expense:", error);
+        toast.error("Failed to delete expense");
+      }
     }
   };
 

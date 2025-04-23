@@ -27,7 +27,7 @@ import {
 
 const Analytics = () => {
   const { currentUser } = useAuth();
-  const { getUserExpenses } = useExpense();
+  const { getUserExpenses, expenses, fetchExpenses } = useExpense();
   
   const [userExpenses, setUserExpenses] = useState<Expense[]>([]);
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
@@ -37,10 +37,23 @@ const Analytics = () => {
   // Colors for charts
   const COLORS = ['#4361EE', '#3DDBD9', '#2EC4B6', '#FF9F1C', '#E71D36', '#7B61FF', '#FCBF49'];
 
+  // Force refresh expenses when component loads
   useEffect(() => {
     if (currentUser) {
-      const expenses = getUserExpenses(currentUser.id);
-      setUserExpenses(expenses);
+      console.log("Analytics: Fetching expenses");
+      
+      // Force refresh expenses
+      fetchExpenses().then(() => {
+        console.log("Analytics: Expenses fetched");
+      });
+    }
+  }, [currentUser, fetchExpenses]);
+
+  useEffect(() => {
+    if (currentUser) {
+      const fetchedExpenses = getUserExpenses(currentUser.id);
+      console.log("Analytics: User expenses loaded:", fetchedExpenses.length);
+      setUserExpenses(fetchedExpenses);
       
       // Generate monthly spending data
       const monthlySpendings: Record<string, number> = {};
@@ -54,7 +67,7 @@ const Analytics = () => {
       }
       
       // Fill with actual data
-      expenses.forEach(expense => {
+      fetchedExpenses.forEach(expense => {
         const date = new Date(expense.date);
         const monthStr = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
         
@@ -72,7 +85,7 @@ const Analytics = () => {
       
       // Generate category data
       const categorySpendings: Record<string, number> = {};
-      expenses.forEach(expense => {
+      fetchedExpenses.forEach(expense => {
         categorySpendings[expense.category] = (categorySpendings[expense.category] || 0) + expense.amount;
       });
       
@@ -96,7 +109,7 @@ const Analytics = () => {
       }
       
       // Fill with actual data
-      expenses.forEach(expense => {
+      fetchedExpenses.forEach(expense => {
         const dateStr = expense.date.split('T')[0];
         if (dailySpendings[dateStr] !== undefined) {
           dailySpendings[dateStr] += expense.amount;
@@ -114,7 +127,7 @@ const Analytics = () => {
       
       setDailyData(dailyChartData);
     }
-  }, [currentUser, getUserExpenses]);
+  }, [currentUser, getUserExpenses, expenses]);
 
   // Calculate total spending by category for comparison
   const totalSpending = categoryData.reduce((sum, item) => sum + item.value, 0);

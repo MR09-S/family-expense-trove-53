@@ -18,9 +18,8 @@ import {
   where,
   getDocs
 } from 'firebase/firestore';
-import { auth, db, storage } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { toast } from 'sonner';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export type UserRole = 'parent' | 'child';
 
@@ -59,7 +58,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           
           if (userDoc.exists()) {
-            const userData = userDoc.data() as Omit<User, 'id'>;
+            const userData = userDoc.data();
             
             // Set current user with combined data
             setCurrentUser({
@@ -69,7 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               role: userData.role,
               avatar: user.photoURL || userData.avatar,
               parentId: userData.parentId,
-              children: userData.children
+              children: userData.children || []
             });
           } else {
             // This would be unusual, as we should have created a user document during registration
@@ -123,6 +122,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     
     try {
+      console.log("Registering new user:", { name, email, role, parentId });
+      
       // Create Firebase auth user
       const userCredential: UserCredential = await createUserWithEmailAndPassword(
         auth, 
@@ -131,23 +132,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
       
       const { user } = userCredential;
+      console.log("Firebase user created:", user.uid);
       
       // Set display name
       await firebaseUpdateProfile(user, { displayName: name });
       
       // Create user document in Firestore
-      const userData: Omit<User, 'id'> = {
+      const userData: any = {
         name,
         email: email.toLowerCase(),
         role,
-        ...(role === 'child' && parentId ? { parentId } : {}),
-        ...(role === 'parent' ? { children: [] } : {})
+        createdAt: new Date().toISOString()
       };
       
+      if (role === 'child' && parentId) {
+        userData.parentId = parentId;
+      } else if (role === 'parent') {
+        userData.children = [];
+      }
+      
       await setDoc(doc(db, 'users', user.uid), userData);
+      console.log("User document created in Firestore");
       
       // If this is a child account, update the parent's children array
       if (role === 'child' && parentId) {
+        console.log("Updating parent's children array");
         const parentRef = doc(db, 'users', parentId);
         const parentDoc = await getDoc(parentRef);
         
@@ -155,6 +164,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const parentData = parentDoc.data();
           const children = [...(parentData.children || []), user.uid];
           await updateDoc(parentRef, { children });
+          console.log("Parent's children array updated");
+          
+          // Update current user if this parent is the logged-in user
+          if (currentUser && currentUser.id === parentId) {
+            setCurrentUser(prev => prev ? {...prev, children} : null);
+          }
+        } else {
+          console.error("Parent document not found");
         }
       }
       
@@ -195,34 +212,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const userRef = doc(db, 'users', currentUser.id);
       
-      // Handle avatar upload if there's a file
-      if (userData.avatar && userData.avatar.startsWith('data:')) {
-        // Convert base64 to file
-        const response = await fetch(userData.avatar);
-        const blob = await response.blob();
-        const avatarRef = ref(storage, `avatars/${currentUser.id}`);
-        await uploadBytes(avatarRef, blob);
-        
-        // Get download URL
-        const downloadURL = await getDownloadURL(avatarRef);
-        
-        // Update Firebase auth profile
-        await firebaseUpdateProfile(auth.currentUser, { photoURL: downloadURL });
-        
-        // Update avatar URL in userData
-        userData.avatar = downloadURL;
-      }
-      
-      // Update user doc in Firestore
-      await updateDoc(userRef, userData);
+      // We'll skip avatar handling since we're not using Firebase Storage
+      const updatedData = { ...userData };
+      delete updatedData.avatar;
       
       // Update Firebase display name if name is being updated
       if (userData.name) {
         await firebaseUpdateProfile(auth.currentUser, { displayName: userData.name });
       }
       
+      // Update user doc in Firestore
+      await updateDoc(userRef, updatedData);
+      
       // Update local state
-      setCurrentUser(prevUser => prevUser ? { ...prevUser, ...userData } : null);
+      setCurrentUser(prevUser => prevUser ? { ...prevUser, ...updatedData } : null);
       
       toast.success('Profile updated');
     } catch (error) {
