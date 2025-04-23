@@ -1,10 +1,16 @@
 
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useEffect } from "react";
 
 const RequireAuth = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, currentUser } = useAuth();
   const location = useLocation();
+
+  // Log authentication state for debugging
+  useEffect(() => {
+    console.log("Auth state:", { isAuthenticated, isLoading, userId: currentUser?.id });
+  }, [isAuthenticated, isLoading, currentUser]);
 
   if (isLoading) {
     return (

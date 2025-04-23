@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   createUserWithEmailAndPassword, 
@@ -51,7 +50,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Listen for auth state changes
   useEffect(() => {
+    console.log("Setting up auth state listener");
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log("Auth state changed:", user?.uid);
+      
       if (user) {
         try {
           // Get additional user data from Firestore
@@ -61,7 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const userData = userDoc.data();
             
             // Set current user with combined data
-            setCurrentUser({
+            const userObj = {
               id: user.uid,
               name: user.displayName || userData.name,
               email: user.email || userData.email,
@@ -69,7 +71,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               avatar: user.photoURL || userData.avatar,
               parentId: userData.parentId,
               children: userData.children || []
-            });
+            };
+            
+            console.log("User data loaded:", userObj);
+            setCurrentUser(userObj);
           } else {
             // This would be unusual, as we should have created a user document during registration
             console.error("User document doesn't exist in Firestore");
@@ -81,6 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           toast.error("Error loading user data");
         }
       } else {
+        console.log("No user signed in");
         setCurrentUser(null);
       }
       
@@ -88,14 +94,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     // Cleanup subscription
-    return () => unsubscribe();
+    return () => {
+      console.log("Cleaning up auth state listener");
+      unsubscribe();
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     
     try {
+      console.log("Attempting login:", email);
       await signInWithEmailAndPassword(auth, email.toLowerCase(), password);
+      console.log("Firebase auth successful");
       // User state will be updated by the auth state observer
       return Promise.resolve();
     } catch (error: any) {
@@ -112,9 +123,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       
       console.error("Login error:", error);
-      return Promise.reject(new Error(errorMessage));
-    } finally {
       setIsLoading(false);
+      return Promise.reject(new Error(errorMessage));
     }
   };
 

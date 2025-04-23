@@ -90,38 +90,48 @@ export const EXPENSE_CATEGORIES = [
 const ExpenseContext = createContext<ExpenseContextType | undefined>(undefined);
 
 export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, isAuthenticated } = useAuth();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [dataFetchAttempted, setDataFetchAttempted] = useState(false);
 
   // Fetch initial data when user changes
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && isAuthenticated) {
+      console.log("ExpenseProvider: User authenticated, fetching data");
       fetchExpenses();
       fetchBudgets();
-    } else {
-      // Clear data when logged out
+      setDataFetchAttempted(true);
+    } else if (!currentUser && dataFetchAttempted) {
+      console.log("ExpenseProvider: User logged out, clearing data");
       setExpenses([]);
       setBudgets([]);
     }
-  }, [currentUser]);
+  }, [currentUser, isAuthenticated]);
 
   // Fetch expenses from Firestore
   const fetchExpenses = async () => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.log("fetchExpenses: No user, skipping fetch");
+      return;
+    }
     
     try {
+      console.log("fetchExpenses: Starting fetch for user", currentUser.id);
       let expensesQuery;
       
       if (currentUser.role === 'parent' && currentUser.children && currentUser.children.length > 0) {
         // For parents, get their expenses and their children's expenses
+        const userIds = [currentUser.id, ...currentUser.children];
+        console.log("Fetching expenses for parent and children:", userIds);
         expensesQuery = query(
           collection(db, 'expenses'),
-          where('userId', 'in', [currentUser.id, ...currentUser.children]),
+          where('userId', 'in', userIds),
           orderBy('date', 'desc')
         );
       } else {
         // For children or parents without children, just get their expenses
+        console.log("Fetching expenses for single user:", currentUser.id);
         expensesQuery = query(
           collection(db, 'expenses'),
           where('userId', '==', currentUser.id),
@@ -147,6 +157,7 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
         });
       });
       
+      console.log(`fetchExpenses: Fetched ${fetchedExpenses.length} expenses`);
       setExpenses(fetchedExpenses);
     } catch (error) {
       console.error("Error fetching expenses:", error);
@@ -156,19 +167,26 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Fetch budgets from Firestore
   const fetchBudgets = async () => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.log("fetchBudgets: No user, skipping fetch");
+      return;
+    }
     
     try {
+      console.log("fetchBudgets: Starting fetch for user", currentUser.id);
       let budgetsQuery;
       
       if (currentUser.role === 'parent' && currentUser.children && currentUser.children.length > 0) {
         // For parents, get their budget and their children's budgets
+        const userIds = [currentUser.id, ...currentUser.children];
+        console.log("Fetching budgets for parent and children:", userIds);
         budgetsQuery = query(
           collection(db, 'budgets'),
-          where('userId', 'in', [currentUser.id, ...currentUser.children])
+          where('userId', 'in', userIds)
         );
       } else {
         // For children or parents without children, just get their budget
+        console.log("Fetching budgets for single user:", currentUser.id);
         budgetsQuery = query(
           collection(db, 'budgets'),
           where('userId', '==', currentUser.id)
@@ -190,6 +208,7 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
         });
       });
       
+      console.log(`fetchBudgets: Fetched ${fetchedBudgets.length} budgets`);
       setBudgets(fetchedBudgets);
     } catch (error) {
       console.error("Error fetching budgets:", error);

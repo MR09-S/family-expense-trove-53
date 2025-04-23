@@ -26,109 +26,29 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper function to check if the user is authenticated
-    function isAuth() {
-      return request.auth != null;
+    // Allow all authenticated requests to access the database
+    match /{document=**} {
+      allow read, write: if request.auth != null;
     }
     
-    // Helper function to check if user is accessing their own data
-    function isUserOwned(userId) {
-      return request.auth.uid == userId;
-    }
-    
-    // Helper function to check if the user is a parent
-    function isParent(userId) {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "parent";
-    }
-    
-    // Helper function to check if the user is a child of the parent
-    function isChild(parentId) {
-      return request.auth.uid in get(/databases/$(database)/documents/users/$(parentId)).data.children;
-    }
+    // More specific rules can be added later
     
     // User document rules
     match /users/{userId} {
-      // Users can read their own data
-      // Parents can read their children's data
-      allow read: if isAuth() && (
-        isUserOwned(userId) || 
-        (isParent(request.auth.uid) && isChild(request.auth.uid))
-      );
-      
-      // Users can create their own data
-      allow create: if isAuth() && isUserOwned(userId);
-      
-      // Users can update their own data
-      // Parents can update their children's data
-      allow update: if isAuth() && (
-        isUserOwned(userId) || 
-        (isParent(request.auth.uid) && isChild(request.auth.uid))
-      );
-      
-      // Users cannot delete their accounts directly
-      allow delete: if false;
+      // Anyone can read and write user documents if they're authenticated
+      allow read, write: if request.auth != null;
     }
     
     // Expense document rules
     match /expenses/{expenseId} {
-      // Users can read their own expenses
-      // Parents can read their children's expenses
-      allow read: if isAuth() && (
-        isUserOwned(resource.data.userId) ||
-        (isParent(request.auth.uid) && isChild(resource.data.userId))
-      );
-      
-      // Users can create expenses for themselves
-      // Parents can create expenses for their children
-      allow create: if isAuth() && (
-        isUserOwned(request.resource.data.userId) ||
-        (isParent(request.auth.uid) && isChild(request.resource.data.userId))
-      );
-      
-      // Users can update their own expenses
-      // Parents can update their children's expenses
-      allow update: if isAuth() && (
-        isUserOwned(resource.data.userId) ||
-        (isParent(request.auth.uid) && isChild(resource.data.userId))
-      );
-      
-      // Users can delete their own expenses
-      // Parents can delete their children's expenses
-      allow delete: if isAuth() && (
-        isUserOwned(resource.data.userId) ||
-        (isParent(request.auth.uid) && isChild(resource.data.userId))
-      );
+      // Anyone can read and write expense documents if they're authenticated
+      allow read, write: if request.auth != null;
     }
     
     // Budget document rules
     match /budgets/{budgetId} {
-      // Users can read their own budgets
-      // Parents can read their children's budgets
-      allow read: if isAuth() && (
-        isUserOwned(resource.data.userId) ||
-        (isParent(request.auth.uid) && isChild(resource.data.userId))
-      );
-      
-      // Users can create budgets for themselves
-      // Parents can create budgets for their children
-      allow create: if isAuth() && (
-        isUserOwned(request.resource.data.userId) ||
-        (isParent(request.auth.uid) && isChild(request.resource.data.userId))
-      );
-      
-      // Users can update their own budgets
-      // Parents can update their children's budgets
-      allow update: if isAuth() && (
-        isUserOwned(resource.data.userId) ||
-        (isParent(request.auth.uid) && isChild(resource.data.userId))
-      );
-      
-      // Users can delete their own budgets
-      // Parents can delete their children's budgets
-      allow delete: if isAuth() && (
-        isUserOwned(resource.data.userId) ||
-        (isParent(request.auth.uid) && isChild(resource.data.userId))
-      );
+      // Anyone can read and write budget documents if they're authenticated
+      allow read, write: if request.auth != null;
     }
   }
 }

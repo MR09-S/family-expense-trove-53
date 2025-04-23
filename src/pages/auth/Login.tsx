@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -11,12 +11,20 @@ import { Label } from "@/components/ui/label";
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isLoading } = useAuth();
+  const { login, isLoading, isAuthenticated } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   // Get the redirect path from location state or default to dashboard
   const from = location.state?.from?.pathname || "/dashboard";
+
+  // Check if user is already authenticated and redirect if necessary
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log("User is authenticated, redirecting to:", from);
+      navigate(from, { replace: true });
+    }
+  }, [isAuthenticated, navigate, from]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +37,7 @@ const Login = () => {
     try {
       await login(email, password);
       toast.success("Login successful!");
-      navigate(from, { replace: true });
+      // Navigation is now handled by the useEffect above
     } catch (error) {
       if (error instanceof Error) {
         toast.error(error.message);
