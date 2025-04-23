@@ -37,7 +37,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Search, Plus, FileText, Download, MoreVertical, Edit, Trash, Calendar, Filter } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatCurrency } from "@/utils";
+import { formatCurrency } from "@/lib/utils";
 
 const Expenses = () => {
   const { currentUser } = useAuth();
@@ -63,26 +63,21 @@ const Expenses = () => {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [currentExpense, setCurrentExpense] = useState<Expense | null>(null);
   
-  // Form states
   const [amount, setAmount] = useState<string>("");
   const [category, setCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
   const [description, setDescription] = useState<string>("");
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
-  // Categories 
   const categories = getCategories();
 
-  // Force refresh expenses when component loads
   useEffect(() => {
     if (currentUser) {
-      // Force refresh expenses
       fetchExpenses().then(() => {
         console.log("Expenses fetched");
       });
     }
   }, [currentUser, fetchExpenses]);
 
-  // Load user's expenses
   useEffect(() => {
     if (currentUser) {
       const fetchedExpenses = getUserExpenses(currentUser.id);
@@ -92,13 +87,11 @@ const Expenses = () => {
     }
   }, [currentUser, getUserExpenses, expenses]);
 
-  // Apply filters
   useEffect(() => {
     if (!userExpenses.length) return;
     
     let result = [...userExpenses];
     
-    // Apply search filter
     if (searchTerm) {
       result = result.filter(exp => 
         exp.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -106,12 +99,10 @@ const Expenses = () => {
       );
     }
     
-    // Apply category filter
     if (categoryFilter && categoryFilter !== "all") {
       result = result.filter(exp => exp.category === categoryFilter);
     }
     
-    // Apply date filter
     if (dateFilter) {
       const today = new Date();
       const startDate = new Date();
@@ -143,13 +134,11 @@ const Expenses = () => {
       }
     }
     
-    // Sort by date (newest first)
     result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     
     setFilteredExpenses(result);
   }, [userExpenses, searchTerm, categoryFilter, dateFilter]);
 
-  // Reset form fields
   const resetForm = () => {
     setAmount("");
     setCategory(EXPENSE_CATEGORIES[0]);
@@ -157,7 +146,6 @@ const Expenses = () => {
     setDate(new Date().toISOString().split('T')[0]);
   };
 
-  // Handle new expense submission
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -191,7 +179,6 @@ const Expenses = () => {
       setShowAddDialog(false);
       resetForm();
       
-      // Force refresh expenses
       await fetchExpenses();
     } catch (error) {
       console.error("Error adding expense:", error);
@@ -199,7 +186,6 @@ const Expenses = () => {
     }
   };
 
-  // Open edit dialog for an expense
   const handleEditClick = (expense: Expense) => {
     setCurrentExpense(expense);
     setAmount(expense.amount.toString());
@@ -209,7 +195,6 @@ const Expenses = () => {
     setShowEditDialog(true);
   };
 
-  // Handle expense update
   const handleUpdateExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -236,7 +221,6 @@ const Expenses = () => {
       resetForm();
       setCurrentExpense(null);
       
-      // Force refresh expenses
       await fetchExpenses();
     } catch (error) {
       console.error("Error updating expense:", error);
@@ -244,13 +228,11 @@ const Expenses = () => {
     }
   };
 
-  // Handle expense deletion
   const handleDeleteExpense = async (id: string) => {
     if (window.confirm("Are you sure you want to delete this expense?")) {
       try {
         await deleteExpense(id);
         
-        // Force refresh expenses
         await fetchExpenses();
       } catch (error) {
         console.error("Error deleting expense:", error);
@@ -298,7 +280,6 @@ const Expenses = () => {
           </div>
         </div>
 
-        {/* Filters */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">Filter Expenses</CardTitle>
@@ -363,7 +344,6 @@ const Expenses = () => {
           </CardContent>
         </Card>
 
-        {/* Expenses Table */}
         <Card>
           <CardContent className="p-0">
             <div className="rounded-md border">
@@ -426,7 +406,6 @@ const Expenses = () => {
         </Card>
       </div>
 
-      {/* Add Expense Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent>
           <DialogHeader>
@@ -505,7 +484,6 @@ const Expenses = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Expense Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent>
           <DialogHeader>

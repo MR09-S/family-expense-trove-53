@@ -23,6 +23,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { formatCurrency } from "@/lib/utils";
 
 const Analytics = () => {
   const { currentUser } = useAuth();
@@ -33,15 +34,12 @@ const Analytics = () => {
   const [categoryData, setCategoryData] = useState<any[]>([]);
   const [dailyData, setDailyData] = useState<any[]>([]);
   
-  // Colors for charts
   const COLORS = ['#4361EE', '#3DDBD9', '#2EC4B6', '#FF9F1C', '#E71D36', '#7B61FF', '#FCBF49'];
 
-  // Force refresh expenses when component loads
   useEffect(() => {
     if (currentUser) {
       console.log("Analytics: Fetching expenses");
       
-      // Force refresh expenses
       fetchExpenses().then(() => {
         console.log("Analytics: Expenses fetched");
       });
@@ -54,18 +52,15 @@ const Analytics = () => {
       console.log("Analytics: User expenses loaded:", fetchedExpenses.length);
       setUserExpenses(fetchedExpenses);
       
-      // Generate monthly spending data
       const monthlySpendings: Record<string, number> = {};
       const now = new Date();
       
-      // Initialize last 12 months with 0
       for (let i = 0; i < 12; i++) {
         const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const monthStr = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
         monthlySpendings[monthStr] = 0;
       }
       
-      // Fill with actual data
       fetchedExpenses.forEach(expense => {
         const date = new Date(expense.date);
         const monthStr = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
@@ -75,14 +70,12 @@ const Analytics = () => {
         }
       });
       
-      // Convert to chart data format and reverse to show chronological order
       const monthlyChartData = Object.entries(monthlySpendings)
         .map(([month, amount]) => ({ month, amount }))
         .reverse();
       
       setMonthlyData(monthlyChartData);
       
-      // Generate category data
       const categorySpendings: Record<string, number> = {};
       fetchedExpenses.forEach(expense => {
         categorySpendings[expense.category] = (categorySpendings[expense.category] || 0) + expense.amount;
@@ -94,12 +87,10 @@ const Analytics = () => {
       
       setCategoryData(categoryChartData);
       
-      // Generate daily spending data for last 30 days
       const dailySpendings: Record<string, number> = {};
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(now.getDate() - 30);
       
-      // Initialize all days with 0
       for (let i = 0; i < 30; i++) {
         const date = new Date();
         date.setDate(now.getDate() - i);
@@ -107,7 +98,6 @@ const Analytics = () => {
         dailySpendings[dateStr] = 0;
       }
       
-      // Fill with actual data
       fetchedExpenses.forEach(expense => {
         const dateStr = expense.date.split('T')[0];
         if (dailySpendings[dateStr] !== undefined) {
@@ -115,7 +105,6 @@ const Analytics = () => {
         }
       });
       
-      // Convert to chart data format and sort by date
       const dailyChartData = Object.entries(dailySpendings)
         .map(([date, amount]) => ({
           date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
@@ -128,10 +117,8 @@ const Analytics = () => {
     }
   }, [currentUser, getUserExpenses, expenses]);
 
-  // Calculate total spending by category for comparison
   const totalSpending = categoryData.reduce((sum, item) => sum + item.value, 0);
   
-  // Get top spending categories
   const topCategories = [...categoryData]
     .sort((a, b) => b.value - a.value)
     .slice(0, 3);
@@ -146,7 +133,6 @@ const Analytics = () => {
           </p>
         </div>
 
-        {/* Overview Card */}
         <Card>
           <CardHeader>
             <CardTitle>Spending Overview</CardTitle>
@@ -281,9 +267,7 @@ const Analytics = () => {
           </CardContent>
         </Card>
 
-        {/* Insights */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Top Spending Categories */}
           <Card className="col-span-1">
             <CardHeader>
               <CardTitle>Top Spending Categories</CardTitle>
@@ -321,7 +305,6 @@ const Analytics = () => {
             </CardContent>
           </Card>
 
-          {/* Average Spending */}
           <Card className="col-span-1">
             <CardHeader>
               <CardTitle>Spending Insights</CardTitle>
@@ -330,7 +313,6 @@ const Analytics = () => {
             <CardContent>
               {userExpenses.length > 0 ? (
                 <div className="space-y-6">
-                  {/* Monthly Average */}
                   <div>
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="font-medium">Monthly Average</h3>
@@ -343,7 +325,6 @@ const Analytics = () => {
                     </p>
                   </div>
                   
-                  {/* Daily Average */}
                   <div>
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="font-medium">Daily Average</h3>
@@ -356,7 +337,6 @@ const Analytics = () => {
                     </p>
                   </div>
                   
-                  {/* Average Transaction */}
                   <div>
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="font-medium">Average Transaction</h3>
@@ -369,7 +349,6 @@ const Analytics = () => {
                     </p>
                   </div>
                   
-                  {/* Highest Daily Spending */}
                   <div>
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="font-medium">Highest Daily Spending</h3>
