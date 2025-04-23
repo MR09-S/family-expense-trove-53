@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useExpense, Expense, EXPENSE_CATEGORIES } from "@/contexts/ExpenseContext";
@@ -38,6 +37,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Search, Plus, FileText, Download, MoreVertical, Edit, Trash, Calendar, Filter } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatCurrency } from "@/utils";
 
 const Expenses = () => {
   const { currentUser } = useAuth();
@@ -389,7 +389,7 @@ const Expenses = () => {
                         </TableCell>
                         <TableCell>{expense.category}</TableCell>
                         <TableCell className="text-right font-medium">
-                          ${expense.amount.toFixed(2)}
+                          {formatCurrency(expense.amount)}
                         </TableCell>
                         <TableCell>
                           <DropdownMenu>

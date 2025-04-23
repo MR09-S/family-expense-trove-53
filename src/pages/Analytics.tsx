@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useExpense, Expense } from "@/contexts/ExpenseContext";
@@ -180,7 +179,7 @@ const Analytics = () => {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" />
                       <YAxis />
-                      <Tooltip formatter={(value) => `$${Number(value).toFixed(2)}`} />
+                      <Tooltip formatter={(value) => formatCurrency(Number(value))} />
                       <Legend />
                       <Bar 
                         dataKey="amount" 
@@ -211,7 +210,7 @@ const Analytics = () => {
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                           ))}
                         </Pie>
-                        <Tooltip formatter={(value) => `$${Number(value).toFixed(2)}`} />
+                        <Tooltip formatter={(value) => formatCurrency(Number(value))} />
                         <Legend />
                       </PieChart>
                     </ResponsiveContainer>
@@ -264,7 +263,7 @@ const Analytics = () => {
                         interval={Math.ceil(dailyData.length / 10)}
                       />
                       <YAxis />
-                      <Tooltip formatter={(value) => `$${Number(value).toFixed(2)}`} />
+                      <Tooltip formatter={(value) => formatCurrency(Number(value))} />
                       <Legend />
                       <Line
                         type="monotone"

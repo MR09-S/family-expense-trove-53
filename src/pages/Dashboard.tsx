@@ -36,6 +36,7 @@ import {
   AlertCircle 
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { formatCurrency } from "@/lib/utils";
 
 const Dashboard = () => {
   const { currentUser } = useAuth();
@@ -239,7 +240,7 @@ const Dashboard = () => {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${totalSpent.toFixed(2)}</div>
+              <div className="text-2xl font-bold">{formatCurrency(totalSpent)}</div>
               <p className="text-xs text-muted-foreground">
                 Total spent this month
               </p>
@@ -257,7 +258,7 @@ const Dashboard = () => {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${budget.toFixed(2)}</div>
+              <div className="text-2xl font-bold">{formatCurrency(budget)}</div>
               <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
                 <div 
                   className={`h-full ${totalSpent <= budget ? 'bg-accent' : 'bg-destructive'}`}
@@ -293,8 +294,8 @@ const Dashboard = () => {
                 totalSpent <= budget ? 'text-green-600' : 'text-red-600'
               }`}>
                 {totalSpent <= budget 
-                  ? `$${(budget - totalSpent).toFixed(2)} left` 
-                  : `$${(totalSpent - budget).toFixed(2)} over`}
+                  ? `${formatCurrency(budget - totalSpent)} left` 
+                  : `${formatCurrency(totalSpent - budget)} over`}
               </div>
               <p className="text-xs text-muted-foreground">
                 {totalSpent <= budget 
@@ -327,7 +328,7 @@ const Dashboard = () => {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" />
                   <YAxis />
-                  <Tooltip formatter={(value) => `$${Number(value).toFixed(2)}`} />
+                  <Tooltip formatter={(value) => formatCurrency(Number(value))} />
                   <Line
                     type="monotone"
                     dataKey="amount"
@@ -363,7 +364,7 @@ const Dashboard = () => {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => `$${Number(value).toFixed(2)}`} />
+                  <Tooltip formatter={(value) => formatCurrency(Number(value))} />
                 </PieChart>
               </ResponsiveContainer>
             </CardContent>
@@ -395,7 +396,7 @@ const Dashboard = () => {
                         <p className="text-xs text-muted-foreground">{expense.category} • {new Date(expense.date).toLocaleDateString()}</p>
                       </div>
                     </div>
-                    <span className="font-medium">${expense.amount.toFixed(2)}</span>
+                    <span className="font-medium">{formatCurrency(expense.amount)}</span>
                   </div>
                 ))
               ) : (
@@ -426,7 +427,7 @@ const Dashboard = () => {
                       <div className="flex items-center justify-between">
                         <p className="font-medium">{child.childName}</p>
                         <span className="text-sm font-medium">
-                          ${child.total.toFixed(2)} / ${child.budget.toFixed(2)}
+                          {formatCurrency(child.total)} / {formatCurrency(child.budget)}
                         </span>
                       </div>
                       <div className="h-2 bg-muted rounded-full overflow-hidden">
