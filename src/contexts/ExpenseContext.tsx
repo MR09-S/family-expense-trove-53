@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from './AuthContext';
@@ -16,7 +15,8 @@ import {
   serverTimestamp,
   Timestamp,
   getDoc,
-  setDoc
+  setDoc,
+  DocumentData
 } from 'firebase/firestore';
 
 export interface Budget {
@@ -36,6 +36,26 @@ export interface Expense {
   date: string; // ISO date string
   createdAt: string | Timestamp; // ISO date string or Firestore timestamp
   updatedAt: string | Timestamp; // ISO date string or Firestore timestamp
+}
+
+// Define types for our Firestore document data
+interface ExpenseDoc extends DocumentData {
+  userId: string;
+  amount: number;
+  category: string;
+  description: string;
+  date: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+interface BudgetDoc extends DocumentData {
+  userId: string;
+  amount: number;
+  period: 'weekly' | 'monthly';
+  categoryLimits?: Record<string, number>;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 interface ExpenseContextType {
@@ -112,7 +132,7 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const fetchedExpenses: Expense[] = [];
       
       querySnapshot.forEach((doc) => {
-        const data = doc.data();
+        const data = doc.data() as ExpenseDoc;
         
         fetchedExpenses.push({
           id: doc.id,
@@ -158,7 +178,7 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const fetchedBudgets: Budget[] = [];
       
       querySnapshot.forEach((doc) => {
-        const data = doc.data();
+        const data = doc.data() as BudgetDoc;
         
         fetchedBudgets.push({
           id: doc.id,
