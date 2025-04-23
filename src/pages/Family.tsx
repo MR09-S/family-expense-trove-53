@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useExpense } from "@/contexts/ExpenseContext";
@@ -28,7 +29,7 @@ interface ChildData {
 
 const Family = () => {
   const { currentUser, updateProfile, register } = useAuth();
-  const { getUserExpenses, getUserBudget, expenses, budgets } = useExpense();
+  const { getUserExpenses, getUserBudget, expenses, budgets, setBudget } = useExpense();
   
   const [childrenData, setChildrenData] = useState<ChildData[]>([]);
   const [selectedChild, setSelectedChild] = useState<ChildData | null>(null);
@@ -80,6 +81,27 @@ const Family = () => {
     if (!selectedChild) return;
 
     try {
+      // Convert budget string to number
+      const budgetAmount = parseFloat(editBudget);
+      
+      // Ensure budget is a valid number
+      if (isNaN(budgetAmount)) {
+        toast.error("Please enter a valid budget amount");
+        return;
+      }
+      
+      // Call the setBudget function from ExpenseContext to update the budget
+      await setBudget(selectedChild.id, budgetAmount, 'monthly');
+      
+      // Update local state
+      setChildrenData(prevData => 
+        prevData.map(child => 
+          child.id === selectedChild.id 
+            ? { ...child, name: editName, budget: budgetAmount }
+            : child
+        )
+      );
+      
       toast.success("Child information updated successfully");
       setShowEditDialog(false);
     } catch (error) {
